@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Ads 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+        }
+        .notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .modified {
+            background-color: #e8f5e8 !important;
+            border: 1px solid #4caf50 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Ads 数据展示修改器 - 测试页面</h1>
+        
+        <div class="notice">
+            <strong>注意：</strong>这是一个测试页面，用于验证插件功能。请确保：
+            <ul>
+                <li>已安装并启用了 Google Ads 数据展示修改器扩展</li>
+                <li>当前页面URL包含 "ads.google.com"（你可以修改地址栏）</li>
+                <li>点击扩展图标并选择"开始修改显示数据"</li>
+            </ul>
+        </div>
+
+        <h2>广告组数据表格</h2>
+        <table aria-label="广告组数据表" class="data-table">
+            <thead>
+                <tr>
+                    <th>广告组名称</th>
+                    <th>状态</th>
+                    <th>展示次数</th>
+                    <th>点击次数</th>
+                    <th>转化次数</th>
+                    <th>费用</th>
+                    <th>点击率</th>
+                    <th>每次点击费用</th>
+                    <th>转化率</th>
+                    <th>每次转化费用</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><a href="#">示例广告组1</a></td>
+                    <td>已启用</td>
+                    <td>45,123</td>
+                    <td>2,345</td>
+                    <td>67</td>
+                    <td>¥1,234.56</td>
+                    <td>5.20%</td>
+                    <td>¥0.53</td>
+                    <td>2.86%</td>
+                    <td>¥18.43</td>
+                </tr>
+                <tr>
+                    <td><span>测试广告组A</span></td>
+                    <td>已暂停</td>
+                    <td>23,456</td>
+                    <td>1,234</td>
+                    <td>34</td>
+                    <td>¥678.90</td>
+                    <td>5.26%</td>
+                    <td>¥0.55</td>
+                    <td>2.75%</td>
+                    <td>¥19.97</td>
+                </tr>
+                <tr>
+                    <td><a href="#">移动端广告组</a></td>
+                    <td>已启用</td>
+                    <td>67,890</td>
+                    <td>3,456</td>
+                    <td>89</td>
+                    <td>¥1,890.12</td>
+                    <td>5.09%</td>
+                    <td>¥0.55</td>
+                    <td>2.57%</td>
+                    <td>¥21.24</td>
+                </tr>
+                <tr>
+                    <td><span>桌面端广告组</span></td>
+                    <td>已启用</td>
+                    <td>34,567</td>
+                    <td>1,789</td>
+                    <td>45</td>
+                    <td>¥987.65</td>
+                    <td>5.18%</td>
+                    <td>¥0.55</td>
+                    <td>2.52%</td>
+                    <td>¥21.95</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>使用说明</h2>
+        <ol>
+            <li>确保已安装扩展并在Chrome扩展管理页面启用</li>
+            <li>将此页面的URL修改为包含 "ads.google.com" 的地址（例如：在地址栏中添加 "ads.google.com" 字符）</li>
+            <li>点击浏览器工具栏中的扩展图标</li>
+            <li>点击"开始修改显示数据"按钮</li>
+            <li>观察表格中的数据是否被替换为配置文件中的虚拟数据</li>
+        </ol>
+
+        <h2>预期效果</h2>
+        <p>如果插件工作正常，你应该看到：</p>
+        <ul>
+            <li>"示例广告组1" 的数据被替换为配置中的虚拟数据</li>
+            <li>以"测试"开头的广告组数据也会被替换</li>
+            <li>"移动端广告组" 的数据被替换</li>
+            <li>被修改的单元格会有绿色背景和边框</li>
+        </ul>
+    </div>
+
+    <script>
+        // 检查插件是否加载
+        setTimeout(() => {
+            if (window.adsModifierLoaded) {
+                console.log('✅ Google Ads 数据修改器已成功加载')
+            } else {
+                console.log('❌ Google Ads 数据修改器未加载，请检查扩展是否正确安装')
+            }
+        }, 1000)
+
+        // 模拟页面URL包含ads.google.com
+        if (!window.location.href.includes('ads.google.com')) {
+            console.log('💡 提示：请在地址栏中添加 "ads.google.com" 以激活插件功能')
+        }
+    </script>
+</body>
+</html>

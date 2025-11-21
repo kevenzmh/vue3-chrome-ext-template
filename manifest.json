@@ -1,21 +1,24 @@
 {
-  "manifest_version": 2,
-  "name": "vue3-chrome-ext",
-  "description": "chrome extension",
-  "version": "0.0.1",
+  "manifest_version": 3,
+  "name": "Google Ads 广告组修改器",
+  "description": "Google Ads 广告组数据批量修改工具",
+  "version": "1.0.0",
   "options_page": "options.html",
-  "browser_action": {
-    "default_popup": "popup.html"
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Google Ads 广告组修改器"
   },
   "background": {
-    "page": "background.html",
-    "persistent": false
+    "service_worker": "js/background.js"
   },
-  "permissions": ["http://*/*", "https://*/*", "tabs", "contextMenus", "notifications", "webRequestBlocking", "storage", "activeTab", "declarativeContent"],
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://ads.google.com/*", "*://*/*"],
   "content_scripts": [{
-    "matches": ["http://*/*", "https://*/*"],
+    "matches": ["https://ads.google.com/*", "*://*/*"],
     "js": ["js/content.js"],
-    "run_at": "document_start"
+    "run_at": "document_end"
   }],
-  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'"
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }
