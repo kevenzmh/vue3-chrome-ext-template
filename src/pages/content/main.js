@@ -1,6 +1,17 @@
 // Google Ads 数据展示修改器 - Content Script
 console.log('Google Ads 数据展示修改器已加载')
 
+const banner = document.createElement('div')
+banner.textContent = 'Google Ads 内容脚本已加载'
+banner.style.position = 'fixed'
+banner.style.top = '0'
+banner.style.left = '0'
+banner.style.zIndex = '999999'
+banner.style.background = 'red'
+banner.style.color = 'white'
+banner.style.padding = '4px 8px'
+banner.style.fontSize = '12px'
+document.documentElement.appendChild(banner)
 class GoogleAdsDataModifier {
   constructor() {
     this.config = null
