@@ -12,6 +12,79 @@ class GoogleAdsDataModifier {
     this.init()
   }
 
+  injectNetworkHook() {
+    try {
+      const script = document.createElement('script')
+      script.type = 'text/javascript'
+      script.textContent = '(' + function () {
+        try {
+          const originalFetch = window.fetch
+          if (!originalFetch) {
+            console.warn('页面中未检测到 fetch，跳过网络 hook')
+            return
+          }
+
+          if (window.__googleAdsFetchHookInstalled) {
+            return
+          }
+          window.__googleAdsFetchHookInstalled = true
+
+          window.fetch = async function () {
+            const args = Array.prototype.slice.call(arguments)
+            const url = args[0]
+
+            const response = await originalFetch.apply(this, args)
+
+            try {
+              if (typeof url === 'string' && url.indexOf('ads.google.com') !== -1) {
+                const clone = response.clone()
+                const contentType = (clone.headers && clone.headers.get && clone.headers.get('content-type')) || ''
+
+                if (contentType.indexOf('application/json') !== -1) {
+                  const data = await clone.json()
+
+                  try {
+                    // 在这里根据实际返回结构修改数据
+                    // 下面是一个示例：如果返回中有 rows 数组，每行有 metrics.impressions 字段，则将其改为固定值
+                    if (Array.isArray(data.rows)) {
+                      data.rows.forEach(function (row) {
+                        if (row && row.metrics && row.metrics.impressions != null) {
+                          row.metrics.impressions = 999999
+                        }
+                      })
+                    }
+                  } catch (e) {
+                    console.error('修改 Google Ads 接口数据时出错', e)
+                  }
+
+                  const body = JSON.stringify(data)
+                  return new Response(body, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers
+                  })
+                }
+              }
+            } catch (e) {
+              console.error('Google Ads fetch hook 处理出错', e)
+            }
+
+            return response
+          }
+
+          console.log('Google Ads fetch hook 已注入')
+        } catch (e) {
+          console.error('注入 Google Ads fetch hook 失败', e)
+        }
+      } + ')();'
+
+      document.documentElement.appendChild(script)
+      script.parentNode && script.parentNode.removeChild(script)
+    } catch (e) {
+      console.error('注入网络 hook 脚本失败', e)
+    }
+  }
+
   async init() {
     // 等待页面加载完成
     if (document.readyState === 'loading') {
@@ -28,6 +101,9 @@ class GoogleAdsDataModifier {
     }
 
     console.log('检测到Google Ads页面，初始化数据修改器...')
+    
+    // 注入页面级网络请求 hook，用于拦截并修改接口返回的数据
+    this.injectNetworkHook()
     
     // 加载配置
     await this.loadConfig()

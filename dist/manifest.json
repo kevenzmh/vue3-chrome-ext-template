@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Google Ads 广告组修改器",
+  "description": "Google Ads 广告组数据批量修改工具",
+  "version": "1.0.0",
+  "options_page": "options.html",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Google Ads 广告组修改器"
+  },
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://ads.google.com/*", "*://*/*"],
+  "content_scripts": [{
+    "matches": ["https://ads.google.com/*", "*://*/*"],
+    "js": ["js/content.js"],
+    "run_at": "document_end"
+  }],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
