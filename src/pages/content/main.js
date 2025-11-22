@@ -1,488 +1,313 @@
-// Google Ads 数据展示修改器 - Content Script
-console.log('Google Ads 数据展示修改器已加载')
+// Google Ads 数据展示修改器 - Content Script (网络拦截版本)
+console.log('[Google Ads Modifier] Content Script 已加载');
 
-const banner = document.createElement('div')
-banner.textContent = 'Google Ads 内容脚本已加载'
-banner.style.position = 'fixed'
-banner.style.top = '0'
-banner.style.left = '0'
-banner.style.zIndex = '999999'
-banner.style.background = 'red'
-banner.style.color = 'white'
-banner.style.padding = '4px 8px'
-banner.style.fontSize = '12px'
-document.documentElement.appendChild(banner)
-class GoogleAdsDataModifier {
+class GoogleAdsNetworkInterceptor {
   constructor() {
-    this.config = null
-    this.isProcessing = false
-    this.modifiedCount = 0
-    this.originalData = new Map() // 存储原始数据
-    this.autoRefreshTimer = null
-    this.isReady = false
-    this.init()
-  }
-
-  injectNetworkHook() {
-    try {
-      const script = document.createElement('script')
-      script.type = 'text/javascript'
-      script.textContent = '(' + function () {
-        try {
-          const originalFetch = window.fetch
-          if (!originalFetch) {
-            console.warn('页面中未检测到 fetch，跳过网络 hook')
-            return
-          }
-
-          if (window.__googleAdsFetchHookInstalled) {
-            return
-          }
-          window.__googleAdsFetchHookInstalled = true
-
-          window.fetch = async function () {
-            const args = Array.prototype.slice.call(arguments)
-            const url = args[0]
-
-            const response = await originalFetch.apply(this, args)
-
-            try {
-              if (typeof url === 'string' && url.indexOf('ads.google.com') !== -1) {
-                const clone = response.clone()
-                const contentType = (clone.headers && clone.headers.get && clone.headers.get('content-type')) || ''
-
-                if (contentType.indexOf('application/json') !== -1) {
-                  const data = await clone.json()
-
-                  try {
-                    // 在这里根据实际返回结构修改数据
-                    // 下面是一个示例：如果返回中有 rows 数组，每行有 metrics.impressions 字段，则将其改为固定值
-                    if (Array.isArray(data.rows)) {
-                      data.rows.forEach(function (row) {
-                        if (row && row.metrics && row.metrics.impressions != null) {
-                          row.metrics.impressions = 999999
-                        }
-                      })
-                    }
-                  } catch (e) {
-                    console.error('修改 Google Ads 接口数据时出错', e)
-                  }
-
-                  const body = JSON.stringify(data)
-                  return new Response(body, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers
-                  })
-                }
-              }
-            } catch (e) {
-              console.error('Google Ads fetch hook 处理出错', e)
-            }
-
-            return response
-          }
-
-          console.log('Google Ads fetch hook 已注入')
-        } catch (e) {
-          console.error('注入 Google Ads fetch hook 失败', e)
-        }
-      } + ')();'
-
-      document.documentElement.appendChild(script)
-      script.parentNode && script.parentNode.removeChild(script)
-    } catch (e) {
-      console.error('注入网络 hook 脚本失败', e)
-    }
+    this.config = null;
+    this.isInjected = false;
+    this.init();
   }
 
   async init() {
+    console.log('[Google Ads Modifier] 初始化中...');
+    
     // 等待页面加载完成
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.setup())
+      document.addEventListener('DOMContentLoaded', () => this.setup());
     } else {
-      this.setup()
+      await this.setup();
     }
   }
 
   async setup() {
-    // 检查是否在Google Ads页面
+    // 检查是否在 Google Ads 页面
     if (!window.location.href.includes('ads.google.com')) {
-      return
+      console.log('[Google Ads Modifier] 不在 Google Ads 页面，跳过');
+      return;
     }
 
-    console.log('检测到Google Ads页面，初始化数据修改器...')
-    
-    // 注入页面级网络请求 hook，用于拦截并修改接口返回的数据
-    this.injectNetworkHook()
+    console.log('[Google Ads Modifier] 检测到 Google Ads 页面');
     
     // 加载配置
-    await this.loadConfig()
+    await this.loadConfig();
     
-    // 监听来自popup的消息
+    // 注入拦截脚本
+    this.injectInterceptorScript();
+    
+    // 监听来自 popup 的消息
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      console.log('收到消息:', request)
-      
-      if (request.action === 'startModification') {
-        console.log('开始执行数据修改...')
-        this.startDataModification().then(() => {
-          sendResponse({ success: true, message: '数据修改完成' })
-        }).catch((error) => {
-          console.error('数据修改失败:', error)
-          sendResponse({ success: false, error: error.message })
-        })
-        return true // 保持消息通道开放以支持异步响应
-      }
-      
-      sendResponse({ success: false, error: '未知操作' })
-      return true
-    })
+      this.handleMessage(request, sender, sendResponse);
+      return true; // 保持消息通道开放
+    });
 
-    // 页面变化监听
-    this.observePageChanges()
+    // 显示状态提示
+    this.showStatusBanner();
     
-    // 如果启用了自动刷新，开始定时刷新
-    if (this.config && this.config.settings.autoRefresh) {
-      this.startAutoRefresh()
-    }
+    console.log('[Google Ads Modifier] 初始化完成');
   }
 
+  /**
+   * 加载配置
+   */
   async loadConfig() {
     try {
-      // 从storage加载配置，如果没有则使用默认配置
-      const result = await chrome.storage.local.get(['adsConfig'])
+      const result = await chrome.storage.local.get(['adsConfig']);
       
       if (!result.adsConfig) {
-        // 使用默认配置
-        this.config = this.getDefaultConfig()
-        // 保存到storage
-        await chrome.storage.local.set({ adsConfig: this.config })
+        // 如果没有配置，从配置文件导入
+        this.config = await this.loadDefaultConfig();
+        await chrome.storage.local.set({ adsConfig: this.config });
       } else {
-        this.config = result.adsConfig
+        this.config = result.adsConfig;
       }
       
-      console.log('配置加载完成:', this.config)
+      console.log('[Google Ads Modifier] 配置加载完成:', this.config);
     } catch (error) {
-      console.error('加载配置失败:', error)
-      this.config = this.getDefaultConfig()
+      console.error('[Google Ads Modifier] 加载配置失败:', error);
+      this.config = this.getDefaultConfig();
     }
   }
 
+  /**
+   * 加载默认配置（从 ads-config.js）
+   */
+  async loadDefaultConfig() {
+    // 由于 content script 无法直接导入 ES6 模块，这里返回默认配置
+    return this.getDefaultConfig();
+  }
+
+  /**
+   * 获取默认配置
+   */
   getDefaultConfig() {
     return {
       adGroups: [
         {
           match: { name: "示例广告组1" },
           displayData: {
-            impressions: "125,680",
-            clicks: "8,432",
+            impressions: "125680",
+            clicks: "8432",
             conversions: "156",
-            cost: "¥2,345.67",
+            cost: "2345.67",
             ctr: "6.70%",
-            cpc: "¥0.28",
+            cpc: "0.28",
             conversionRate: "1.85%",
-            cpa: "¥15.04"
+            cpa: "15.04"
+          }
+        },
+        {
+          match: { namePattern: "/测试广告组.*/" },
+          displayData: {
+            impressions: "89234",
+            clicks: "5678",
+            conversions: "89",
+            cost: "1567.89",
+            ctr: "6.36%",
+            cpc: "0.28",
+            conversionRate: "1.57%",
+            cpa: "17.62"
           }
         }
       ],
       globalData: {
-        impressions: "50,000",
-        clicks: "3,000",
+        impressions: "50000",
+        clicks: "3000",
         conversions: "60",
-        cost: "¥840.00",
+        cost: "840.00",
         ctr: "6.00%",
-        cpc: "¥0.28",
+        cpc: "0.28",
         conversionRate: "2.00%",
-        cpa: "¥14.00"
+        cpa: "14.00"
       },
       settings: {
-        modificationDelay: 500,
         verbose: true,
         enableGlobalData: false,
-        autoRefresh: true,
-        refreshInterval: 5000
-      },
-      selectors: {
-        adGroupTable: 'table[aria-label*="广告组"], table[aria-label*="Ad group"], .data-table, [role="table"]',
-        adGroupRow: 'tbody tr, [role="row"]',
-        adGroupName: 'td:first-child a, td:first-child span, [data-column="name"]'
+        autoUpdate: true
       }
-    }
+    };
   }
 
-  async startDataModification() {
-    if (this.isProcessing) {
-      console.log('数据修改正在进行中，请稍候...')
-      return
+  /**
+   * 注入拦截脚本到页面
+   */
+  injectInterceptorScript() {
+    if (this.isInjected) {
+      console.log('[Google Ads Modifier] 拦截脚本已注入，跳过');
+      return;
     }
 
-    this.isProcessing = true
-    this.modifiedCount = 0
-    
-    console.log('开始修改广告组显示数据...')
-    
     try {
-      await this.findAndModifyDisplayData()
-      console.log(`数据修改完成，共修改了 ${this.modifiedCount} 个广告组的显示数据`)
-    } catch (error) {
-      console.error('修改过程中出现错误:', error)
-    } finally {
-      this.isProcessing = false
-    }
-  }
-
-  async findAndModifyDisplayData() {
-    // 等待表格加载
-    await this.waitForElement(this.config.selectors.adGroupTable)
-    
-    const tables = document.querySelectorAll(this.config.selectors.adGroupTable)
-    if (tables.length === 0) {
-      throw new Error('未找到广告组表格')
-    }
-
-    // 处理所有找到的表格
-    for (const table of tables) {
-      const rows = table.querySelectorAll(this.config.selectors.adGroupRow)
-      console.log(`在表格中找到 ${rows.length} 个广告组行`)
-
-      for (const row of rows) {
-        await this.processAdGroupDisplayData(row)
-        // 添加延迟避免操作过快
-        await this.delay(this.config.settings.modificationDelay)
-      }
-    }
-  }
-
-  async processAdGroupDisplayData(row) {
-    try {
-      const nameElement = row.querySelector(this.config.selectors.adGroupName)
-      if (!nameElement) return
-
-      const currentName = nameElement.textContent.trim()
-      if (!currentName || currentName === '') return
-
-      console.log(`处理广告组: ${currentName}`)
-
-      // 备份原始数据（如果还没有备份过）
-      if (!this.originalData.has(currentName)) {
-        this.backupOriginalData(row, currentName)
-      }
-
-      // 查找匹配的配置
-      const matchedConfig = this.findMatchingConfig(currentName)
-      let displayData = null
-
-      if (matchedConfig) {
-        displayData = matchedConfig.displayData
-        console.log(`找到匹配配置，使用自定义数据: ${currentName}`)
-      } else if (this.config.settings.enableGlobalData) {
-        displayData = this.config.globalData
-        console.log(`使用全局数据: ${currentName}`)
-      }
-
-      if (displayData) {
-        // 修改显示数据
-        await this.modifyRowDisplayData(row, displayData)
-        this.modifiedCount++
-      }
+      // 读取注入脚本
+      const scriptUrl = chrome.runtime.getURL('js/inject-script.js');
+      
+      const script = document.createElement('script');
+      script.src = scriptUrl;
+      script.type = 'text/javascript';
+      
+      script.onload = () => {
+        console.log('[Google Ads Modifier] 拦截脚本注入成功');
+        this.isInjected = true;
+        
+        // 注入成功后，发送配置
+        this.updateInterceptorConfig();
+      };
+      
+      script.onerror = (error) => {
+        console.error('[Google Ads Modifier] 拦截脚本注入失败:', error);
+      };
+      
+      (document.head || document.documentElement).appendChild(script);
       
     } catch (error) {
-      console.error('处理广告组行时出错:', error)
+      console.error('[Google Ads Modifier] 注入脚本时出错:', error);
     }
   }
 
-  findMatchingConfig(adGroupName) {
-    return this.config.adGroups.find(config => {
-      if (config.match.name) {
-        return config.match.name === adGroupName
-      }
-      if (config.match.namePattern) {
-        const pattern = new RegExp(config.match.namePattern)
-        return pattern.test(adGroupName)
-      }
-      return false
-    })
-  }
-
-  async modifyRowDisplayData(row, displayData) {
-    const cells = row.querySelectorAll('td')
-    
-    // 通过列索引或内容匹配来修改数据
-    cells.forEach((cell, index) => {
-      const cellText = cell.textContent.trim().toLowerCase()
+  /**
+   * 更新注入脚本的配置
+   */
+  updateInterceptorConfig() {
+    try {
+      window.postMessage({
+        type: 'UPDATE_INTERCEPTOR_CONFIG',
+        config: this.config
+      }, '*');
       
-      // 根据单元格内容或位置判断数据类型并替换
-      if (this.isImpressionsCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.impressions)
-      } else if (this.isClicksCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.clicks)
-      } else if (this.isConversionsCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.conversions)
-      } else if (this.isCostCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.cost)
-      } else if (this.isCtrCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.ctr)
-      } else if (this.isCpcCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.cpc)
-      } else if (this.isConversionRateCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.conversionRate)
-      } else if (this.isCpaCell(cell, cellText, index)) {
-        this.updateCellContent(cell, displayData.cpa)
-      }
-    })
-  }
-
-  // 判断单元格类型的辅助方法
-  isImpressionsCell(cell, text, index) {
-    return text.includes('展示') || text.includes('impression') || 
-           /^\d{1,3}(,\d{3})*$/.test(text) && index >= 2 && index <= 4
-  }
-
-  isClicksCell(cell, text, index) {
-    return text.includes('点击') || text.includes('click') ||
-           /^\d{1,3}(,\d{3})*$/.test(text) && index >= 3 && index <= 5
-  }
-
-  isConversionsCell(cell, text, index) {
-    return text.includes('转化') || text.includes('conversion') ||
-           /^\d{1,3}(,\d{3})*$/.test(text) && index >= 4 && index <= 6
-  }
-
-  isCostCell(cell, text, index) {
-    return text.includes('费用') || text.includes('cost') || text.includes('¥') || text.includes('$')
-  }
-
-  isCtrCell(cell, text, index) {
-    return text.includes('点击率') || text.includes('ctr') || text.includes('%') && text.length <= 6
-  }
-
-  isCpcCell(cell, text, index) {
-    return text.includes('每次点击') || text.includes('cpc') || 
-           (text.includes('¥') || text.includes('$')) && text.length <= 10
-  }
-
-  isConversionRateCell(cell, text, index) {
-    return text.includes('转化率') || text.includes('conv') && text.includes('%')
-  }
-
-  isCpaCell(cell, text, index) {
-    return text.includes('每次转化') || text.includes('cpa') ||
-           (text.includes('¥') || text.includes('$')) && text.length <= 15
-  }
-
-  updateCellContent(cell, newValue) {
-    if (!newValue) return
-    
-    // 查找可编辑的元素
-    const editableElement = cell.querySelector('span, div, input') || cell
-    
-    if (editableElement.tagName === 'INPUT') {
-      editableElement.value = newValue
-      editableElement.dispatchEvent(new Event('input', { bubbles: true }))
-    } else {
-      editableElement.textContent = newValue
-    }
-    
-    // 添加样式标记表示已修改
-    cell.style.backgroundColor = '#e8f5e8'
-    cell.style.border = '1px solid #4caf50'
-    cell.title = '数据已被插件修改'
-  }
-
-  backupOriginalData(row, name) {
-    const cells = row.querySelectorAll('td')
-    const originalRowData = Array.from(cells).map(cell => cell.textContent.trim())
-    
-    this.originalData.set(name, {
-      data: originalRowData,
-      timestamp: new Date().toISOString()
-    })
-    
-    if (this.config.settings.verbose) {
-      console.log(`备份原始数据: ${name}`, originalRowData)
+      console.log('[Google Ads Modifier] 配置已发送到拦截器');
+    } catch (error) {
+      console.error('[Google Ads Modifier] 发送配置失败:', error);
     }
   }
 
-  startAutoRefresh() {
-    if (this.autoRefreshTimer) {
-      clearInterval(this.autoRefreshTimer)
-    }
+  /**
+   * 处理来自 popup 的消息
+   */
+  handleMessage(request, sender, sendResponse) {
+    console.log('[Google Ads Modifier] 收到消息:', request);
     
-    this.autoRefreshTimer = setInterval(() => {
-      if (!this.isProcessing) {
-        console.log('自动刷新数据...')
-        this.startDataModification()
-      }
-    }, this.config.settings.refreshInterval)
-  }
-
-  stopAutoRefresh() {
-    if (this.autoRefreshTimer) {
-      clearInterval(this.autoRefreshTimer)
-      this.autoRefreshTimer = null
-    }
-  }
-
-  observePageChanges() {
-    // 监听页面变化，以便在页面更新时重新修改数据
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-          // 检查是否有新的广告组表格加载
-          const hasTable = Array.from(mutation.addedNodes).some(node => 
-            node.nodeType === 1 && node.querySelector && 
-            node.querySelector(this.config.selectors.adGroupTable)
-          )
-          if (hasTable && !this.isProcessing) {
-            console.log('检测到新的广告组表格，自动修改数据')
-            setTimeout(() => this.startDataModification(), 1000)
+    switch (request.action) {
+      case 'startModification':
+        this.startModification()
+          .then(() => {
+            sendResponse({ success: true, message: '拦截器已激活，正在修改网络响应数据' });
+          })
+          .catch((error) => {
+            sendResponse({ success: false, error: error.message });
+          });
+        break;
+        
+      case 'updateConfig':
+        this.updateConfig(request.config)
+          .then(() => {
+            sendResponse({ success: true, message: '配置已更新' });
+          })
+          .catch((error) => {
+            sendResponse({ success: false, error: error.message });
+          });
+        break;
+        
+      case 'getStatus':
+        sendResponse({ 
+          success: true, 
+          status: {
+            isInjected: this.isInjected,
+            config: this.config
           }
-        }
-      })
-    })
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    })
+        });
+        break;
+        
+      default:
+        sendResponse({ success: false, error: '未知操作' });
+    }
   }
 
-  async waitForElement(selector, timeout = 10000) {
-    return new Promise((resolve, reject) => {
-      const element = document.querySelector(selector)
-      if (element) {
-        resolve(element)
-        return
+  /**
+   * 开始修改
+   */
+  async startModification() {
+    console.log('[Google Ads Modifier] 激活网络拦截...');
+    
+    if (!this.isInjected) {
+      this.injectInterceptorScript();
+    } else {
+      // 重新发送配置以确保最新
+      this.updateInterceptorConfig();
+    }
+    
+    // 刷新页面以应用拦截（可选）
+    if (this.config.settings.autoUpdate) {
+      console.log('[Google Ads Modifier] 建议刷新页面以完全应用拦截');
+    }
+  }
+
+  /**
+   * 更新配置
+   */
+  async updateConfig(newConfig) {
+    this.config = newConfig;
+    await chrome.storage.local.set({ adsConfig: newConfig });
+    this.updateInterceptorConfig();
+    console.log('[Google Ads Modifier] 配置已更新并同步');
+  }
+
+  /**
+   * 显示状态横幅
+   */
+  showStatusBanner() {
+    const banner = document.createElement('div');
+    banner.id = 'google-ads-modifier-banner';
+    banner.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-weight: bold;">🔧 Google Ads 数据修改器</span>
+        <span>网络拦截已激活</span>
+      </div>
+    `;
+    
+    banner.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 999999;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      animation: slideDown 0.3s ease-out;
+    `;
+    
+    // 添加动画
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideDown {
+        from {
+          transform: translateY(-100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
       }
-
-      const observer = new MutationObserver(() => {
-        const element = document.querySelector(selector)
-        if (element) {
-          observer.disconnect()
-          resolve(element)
-        }
-      })
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      })
-
-      setTimeout(() => {
-        observer.disconnect()
-        reject(new Error(`等待元素超时: ${selector}`))
-      }, timeout)
-    })
-  }
-
-  delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(banner);
+    
+    // 5秒后淡出
+    setTimeout(() => {
+      banner.style.transition = 'opacity 0.5s, transform 0.5s';
+      banner.style.opacity = '0';
+      banner.style.transform = 'translateY(-100%)';
+      setTimeout(() => banner.remove(), 500);
+    }, 5000);
   }
 }
 
-// 初始化数据修改器
-const dataModifier = new GoogleAdsDataModifier()
+// 初始化
+const interceptor = new GoogleAdsNetworkInterceptor();
 
-// 向页面注入一个标记，表示content script已加载
-window.adsModifierLoaded = true
-console.log('Google Ads 数据修改器初始化完成')
+// 暴露到全局，方便调试
+window.googleAdsInterceptor = interceptor;
