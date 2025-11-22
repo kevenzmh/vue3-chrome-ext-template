@@ -1,10 +1,10 @@
-// Google Ads 概览页面专用拦截器
+// Google Ads OverviewService 精确拦截器
 (function() {
   'use strict';
 
   console.clear();
   console.log('%c════════════════════════════════════════════', 'color: #00ff00; font-weight: bold;');
-  console.log('%c  Google Ads 概览页面拦截器', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+  console.log('%c  OverviewService 拦截器 v2.0', 'color: #00ff00; font-weight: bold; font-size: 16px;');
   console.log('%c════════════════════════════════════════════', 'color: #00ff00; font-weight: bold;');
 
   if (window.__overviewInterceptor) {
@@ -34,22 +34,10 @@
     const url = typeof args[0] === 'string' ? args[0] : args[0]?.url;
     stats.total++;
 
-    // 只拦截概览相关的 RPC 请求
-    const isOverviewRequest = url && (
-      url.includes('/rpc/OverviewService') ||
-      url.includes('/_/rpc/') ||
-      url.includes('/_/aw/')
-    );
+    // 精确匹配 OverviewService/Get
+    const isTargetRequest = url && url.includes('/rpc/OverviewService/Get');
 
-    // 排除无用请求
-    const isExcluded = url && (
-      url.includes('ipl_status') ||
-      url.includes('heartbeat') ||
-      url.includes('analytics') ||
-      url.includes('gstatic')
-    );
-
-    if (!isOverviewRequest || isExcluded) {
+    if (!isTargetRequest) {
       return originalFetch.apply(this, args);
     }
 
@@ -57,15 +45,15 @@
     stats.interceptedUrls.push(url);
 
     console.log('%c═══════════════════════════════════════════════════════', 'color: #ff9800; font-weight: bold;');
-    console.log('%c🎯 拦截到概览页面请求 #' + stats.intercepted, 'color: #ff9800; font-weight: bold; font-size: 14px;');
+    console.log('%c🎯 拦截到 OverviewService 请求！', 'color: #ff9800; font-weight: bold; font-size: 16px;');
     console.log('%c═══════════════════════════════════════════════════════', 'color: #ff9800; font-weight: bold;');
     console.log('🔗 URL:', url);
+    console.log('📅 时间:', new Date().toLocaleTimeString());
 
     try {
       const response = await originalFetch.apply(this, args);
 
-      // 处理空响应
-      if (!response.ok || response.status === 204) {
+      if (!response.ok) {
         console.log('⚠️  响应状态异常:', response.status);
         console.log('%c═══════════════════════════════════════════════════════', 'color: #ff9800;');
         return response;
@@ -76,27 +64,32 @@
 
       console.log('✅ 响应状态:', response.status);
       console.log('📦 响应长度:', text.length, 'bytes');
-      console.log('📄 响应前800字符:');
-      console.log(text.substring(0, 800));
+      console.log('📄 响应前1000字符:');
+      console.log(text.substring(0, 1000));
+      console.log('...');
       console.log('');
 
       // 修改数据
-      const modifiedText = modifyOverviewData(text, url);
+      const modifiedText = modifyOverviewData(text);
 
       if (modifiedText !== text) {
         stats.modified++;
-        console.log('%c✨✨✨ 数据修改成功！✨✨✨', 'color: #4caf50; font-weight: bold; font-size: 16px;');
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #4caf50; font-weight: bold;');
+        console.log('%c✨✨✨ 数据修改成功！✨✨✨', 'color: #4caf50; font-weight: bold; font-size: 18px;');
+        console.log('%c═══════════════════════════════════════════════════════', 'color: #4caf50; font-weight: bold;');
         console.log('');
         console.log('📊 修改后的数据:');
-        console.log('  点击次数:', virtualData.clicks);
-        console.log('  展示次数:', virtualData.impressions);
-        console.log('  平均CPC:', virtualData.averageCpc);
-        console.log('  费用:', virtualData.cost);
+        console.log('  ✅ 点击次数:', virtualData.clicks);
+        console.log('  ✅ 展示次数:', virtualData.impressions);
+        console.log('  ✅ 平均CPC:', virtualData.averageCpc, '元');
+        console.log('  ✅ 费用:', virtualData.cost, '元');
         console.log('');
-        console.log('修改后响应前800字符:');
-        console.log(modifiedText.substring(0, 800));
+        console.log('📄 修改后响应前1000字符:');
+        console.log(modifiedText.substring(0, 1000));
+        console.log('...');
       } else {
         console.log('%c⚠️  数据未修改（未找到匹配字段）', 'color: #ff9800; font-weight: bold;');
+        console.log('这可能是因为字段名称不匹配，请查看上面的原始响应');
       }
 
       console.log('%c═══════════════════════════════════════════════════════', 'color: #ff9800; font-weight: bold;');
@@ -117,8 +110,8 @@
 
   // ==================== 数据修改函数 ====================
 
-  function modifyOverviewData(text, url) {
-    console.log('🔄 开始修改概览数据...');
+  function modifyOverviewData(text) {
+    console.log('🔄 开始分析和修改数据...');
 
     // 处理 Google RPC 前缀
     let jsonText = text;
@@ -138,12 +131,18 @@
 
       if (Array.isArray(data)) {
         console.log('  数组长度:', data.length);
-      } else if (typeof data === 'object') {
+        // 打印数组结构
+        data.forEach((item, i) => {
+          if (i < 3) { // 只打印前3项
+            console.log(`  [${i}]:`, typeof item, Array.isArray(item) ? `数组(${item.length})` : '');
+          }
+        });
+      } else if (typeof data === 'object' && data !== null) {
         console.log('  对象键:', Object.keys(data));
       }
 
       // 深度修改
-      const modifiedData = deepModify(data, '');
+      const modifiedData = deepModify(data, '', 0);
 
       // 序列化
       let result = JSON.stringify(modifiedData);
@@ -160,12 +159,14 @@
     }
   }
 
-  function deepModify(data, path) {
+  function deepModify(data, path, depth) {
+    // 防止递归太深
+    if (depth > 10) return data;
     if (data == null) return data;
 
     // 数组
     if (Array.isArray(data)) {
-      return data.map((item, index) => deepModify(item, `${path}[${index}]`));
+      return data.map((item, index) => deepModify(item, `${path}[${index}]`, depth + 1));
     }
 
     // 对象
@@ -177,50 +178,72 @@
         const currentPath = path ? `${path}.${key}` : key;
         const keyLower = String(key).toLowerCase();
 
-        // 检查是否是数字类型的字段
+        // 检查是否是数字类型
         const isNumeric = typeof value === 'number' || 
                          (typeof value === 'string' && /^\d+(\.\d+)?$/.test(String(value).trim()));
 
         if (isNumeric) {
-          // 点击次数
-          if (keyLower.includes('click') && !keyLower.includes('rate') && !keyLower.includes('cpc')) {
-            result[key] = virtualData.clicks;
-            console.log(`  🔧 修改 ${currentPath}: ${value} → ${virtualData.clicks} (点击次数)`);
-            continue;
-          }
+          let modified = false;
+          let newValue = value;
 
+          // 点击次数 - 各种可能的字段名
+          if (keyLower.match(/^clicks?$/) || 
+              keyLower === 'click' ||
+              keyLower === 'clickcount' ||
+              keyLower === 'numclicks') {
+            newValue = virtualData.clicks;
+            modified = true;
+            console.log(`  🔧 [点击] ${currentPath}: ${value} → ${newValue}`);
+          }
+          
           // 展示次数
-          if (keyLower.includes('impr') || keyLower.includes('impression')) {
-            result[key] = virtualData.impressions;
-            console.log(`  🔧 修改 ${currentPath}: ${value} → ${virtualData.impressions} (展示次数)`);
-            continue;
+          else if (keyLower.match(/^impr(essions?)?$/) || 
+                   keyLower === 'impression' ||
+                   keyLower === 'impressioncount' ||
+                   keyLower === 'numimpressions' ||
+                   keyLower === 'views') {
+            newValue = virtualData.impressions;
+            modified = true;
+            console.log(`  🔧 [展示] ${currentPath}: ${value} → ${newValue}`);
           }
-
-          // 平均每次点击费用
-          if (keyLower.includes('cpc') || keyLower.includes('avgcpc') || 
-              (keyLower.includes('average') && keyLower.includes('cpc'))) {
-            result[key] = virtualData.averageCpc;
-            console.log(`  🔧 修改 ${currentPath}: ${value} → ${virtualData.averageCpc} (平均CPC)`);
-            continue;
+          
+          // 平均CPC
+          else if (keyLower.includes('cpc') || 
+                   keyLower.includes('avgcpc') ||
+                   keyLower === 'averagecpc' ||
+                   keyLower === 'avg_cpc' ||
+                   (keyLower.includes('average') && keyLower.includes('cost') && keyLower.includes('click'))) {
+            newValue = virtualData.averageCpc;
+            modified = true;
+            console.log(`  🔧 [平均CPC] ${currentPath}: ${value} → ${newValue}`);
           }
-
-          // 费用（可能是微单位 micros）
-          if (keyLower.includes('cost') || keyLower.includes('spend')) {
-            // 如果原值很大（>100000），说明是微单位（1元 = 1000000微单位）
+          
+          // 费用
+          else if (keyLower.match(/^cost$/) || 
+                   keyLower === 'totalcost' ||
+                   keyLower === 'spend' ||
+                   keyLower === 'amount' ||
+                   keyLower === 'costmicros' ||
+                   keyLower === 'cost_micros') {
+            // Google Ads API 通常使用微单位 (1元 = 1,000,000 micros)
             if (typeof value === 'number' && value > 100000) {
-              const microCost = Math.round(virtualData.cost * 1000000);
-              result[key] = microCost;
-              console.log(`  🔧 修改 ${currentPath}: ${value} → ${microCost} (费用-微单位)`);
+              newValue = Math.round(virtualData.cost * 1000000);
+              console.log(`  🔧 [费用-微单位] ${currentPath}: ${value} → ${newValue}`);
             } else {
-              result[key] = virtualData.cost;
-              console.log(`  🔧 修改 ${currentPath}: ${value} → ${virtualData.cost} (费用)`);
+              newValue = virtualData.cost;
+              console.log(`  🔧 [费用] ${currentPath}: ${value} → ${newValue}`);
             }
+            modified = true;
+          }
+
+          if (modified) {
+            result[key] = newValue;
             continue;
           }
         }
 
         // 递归处理
-        result[key] = deepModify(value, currentPath);
+        result[key] = deepModify(value, currentPath, depth + 1);
       }
 
       return result;
@@ -235,43 +258,31 @@
     let result = text;
     let changeCount = 0;
 
-    const replacements = [
-      { 
-        name: '点击次数', 
-        pattern: /"clicks?"\s*:\s*(\d+)/gi, 
-        value: virtualData.clicks 
-      },
-      { 
-        name: '展示次数', 
-        pattern: /"impressions?"\s*:\s*(\d+)/gi, 
-        value: virtualData.impressions 
-      },
-      { 
-        name: '平均CPC', 
-        pattern: /"(average_?cpc|avg_?cpc)"\s*:\s*(\d+\.?\d*)/gi, 
-        value: virtualData.averageCpc 
-      },
-      { 
-        name: '费用', 
-        pattern: /"(cost|spend)"\s*:\s*(\d+\.?\d*)/gi, 
-        value: virtualData.cost 
-      }
+    // 更宽松的正则模式
+    const patterns = [
+      { name: '点击', regex: /"clicks?"\s*:\s*"?(\d+)"?/gi, value: virtualData.clicks },
+      { name: '展示', regex: /"impressions?"\s*:\s*"?(\d+)"?/gi, value: virtualData.impressions },
+      { name: 'CPC', regex: /"(avg_?cpc|average_?cpc|cpc)"\s*:\s*"?(\d+\.?\d*)"?/gi, value: virtualData.averageCpc },
+      { name: '费用', regex: /"(cost|spend|totalcost)"\s*:\s*"?(\d+\.?\d*)"?/gi, value: virtualData.cost }
     ];
 
-    replacements.forEach(({ name, pattern, value }) => {
-      const before = result;
-      result = result.replace(pattern, (match, ...args) => {
-        changeCount++;
-        const num = args[args.length - 3]; // 获取捕获的数字
-        return match.replace(num, value);
-      });
-
-      if (result !== before) {
-        console.log(`  ✓ 替换了 ${name}`);
+    patterns.forEach(({ name, regex, value }) => {
+      const matches = text.match(regex);
+      if (matches && matches.length > 0) {
+        console.log(`  找到 ${matches.length} 个 ${name} 字段`);
+        result = result.replace(regex, (match) => {
+          changeCount++;
+          return match.replace(/\d+\.?\d*/, value);
+        });
       }
     });
 
-    console.log(`  共修改 ${changeCount} 个字段`);
+    if (changeCount > 0) {
+      console.log(`  ✓ 通过正则修改了 ${changeCount} 个字段`);
+    } else {
+      console.log(`  ✗ 未找到可替换的字段`);
+    }
+
     return result;
   }
 
@@ -280,7 +291,6 @@
   window.__overviewInterceptor = {
     _originalFetch: originalFetch,
 
-    // 查看统计
     stats: function() {
       console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #9c27b0; font-weight: bold;');
       console.log('%c📊 拦截器统计', 'color: #9c27b0; font-weight: bold; font-size: 14px;');
@@ -293,25 +303,25 @@
       if (stats.interceptedUrls.length > 0) {
         console.log('\n拦截的 URL:');
         stats.interceptedUrls.forEach((url, i) => {
-          console.log(`  ${i + 1}. ${url.substring(0, 100)}...`);
+          console.log(`  ${i + 1}. ${url}`);
         });
+      } else {
+        console.log('\n暂未拦截到任何请求');
+        console.log('💡 请刷新概览页面以触发数据加载');
       }
       console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #9c27b0; font-weight: bold;');
     },
 
-    // 查看当前设置的虚拟数据
     getData: function() {
       console.log('当前虚拟数据:', virtualData);
     },
 
-    // 修改虚拟数据
     setData: function(newData) {
       Object.assign(virtualData, newData);
       console.log('✅ 虚拟数据已更新:', virtualData);
       console.log('💡 刷新页面以应用新数据');
     },
 
-    // 卸载拦截器
     uninstall: function() {
       window.fetch = originalFetch;
       console.log('🗑️  拦截器已卸载');
@@ -326,12 +336,10 @@
   console.log('  平均CPC:', virtualData.averageCpc, '元');
   console.log('  费用:', virtualData.cost, '元');
   console.log('');
-  console.log('%c💡 使用方法:', 'color: #00bfff; font-weight: bold;');
-  console.log('  __overviewInterceptor.stats()     - 查看统计');
-  console.log('  __overviewInterceptor.getData()   - 查看当前数据');
-  console.log('  __overviewInterceptor.setData({clicks: 99999})  - 修改数据');
+  console.log('%c💡 目标 API:', 'color: #00bfff; font-weight: bold;');
+  console.log('  /rpc/OverviewService/Get');
   console.log('');
-  console.log('%c🔔 现在请刷新概览页面，或切换到概览页面！', 'color: #ff9800; font-weight: bold; font-size: 14px;');
+  console.log('%c🔔 现在请刷新概览页面！', 'color: #ff9800; font-weight: bold; font-size: 14px;');
   console.log('%c════════════════════════════════════════════', 'color: #00ff00; font-weight: bold;');
 
 })();
