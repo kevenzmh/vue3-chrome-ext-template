@@ -19,10 +19,21 @@ module.exports = {
   configureWebpack: {
     plugins: [
       new CopyWebpackPlugin({
-        patterns: [{
-          from: path.resolve('manifest.json'),
-          to: `${path.resolve('dist')}/manifest.json`
-        }]
-      })]
+        patterns: [
+          {
+            from: path.resolve('manifest.json'),
+            to: `${path.resolve('dist')}/manifest.json`
+          },
+          {
+            from: path.resolve('public/js'),
+            to: `${path.resolve('dist')}/js`
+          },
+          {
+            from: path.resolve('public/lib'),
+            to: `${path.resolve('dist')}/lib`
+          }
+        ]
+      })
+    ]
   }
 }

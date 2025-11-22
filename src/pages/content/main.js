@@ -31,8 +31,8 @@ class GoogleAdsNetworkInterceptor {
     // 加载配置
     await this.loadConfig();
     
-    // 注入拦截脚本
-    this.injectInterceptorScript();
+    // 先注入 ajaxhook 库,然后注入拦截脚本
+    this.injectScripts();
     
     // 监听来自 popup 的消息
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -54,8 +54,8 @@ class GoogleAdsNetworkInterceptor {
       const result = await chrome.storage.local.get(['adsConfig']);
       
       if (!result.adsConfig) {
-        // 如果没有配置，从配置文件导入
-        this.config = await this.loadDefaultConfig();
+        // 如果没有配置，使用默认配置
+        this.config = this.getDefaultConfig();
         await chrome.storage.local.set({ adsConfig: this.config });
       } else {
         this.config = result.adsConfig;
@@ -66,14 +66,6 @@ class GoogleAdsNetworkInterceptor {
       console.error('[Google Ads Modifier] 加载配置失败:', error);
       this.config = this.getDefaultConfig();
     }
-  }
-
-  /**
-   * 加载默认配置（从 ads-config.js）
-   */
-  async loadDefaultConfig() {
-    // 由于 content script 无法直接导入 ES6 模块，这里返回默认配置
-    return this.getDefaultConfig();
   }
 
   /**
@@ -128,35 +120,50 @@ class GoogleAdsNetworkInterceptor {
   }
 
   /**
-   * 注入拦截脚本到页面
+   * 注入脚本(先注入 ajaxhook,再注入拦截脚本)
    */
-  injectInterceptorScript() {
+  injectScripts() {
     if (this.isInjected) {
       console.log('[Google Ads Modifier] 拦截脚本已注入，跳过');
       return;
     }
 
     try {
-      // 读取注入脚本
-      const scriptUrl = chrome.runtime.getURL('js/inject-script.js');
+      // 第一步:注入 ajaxhook 库
+      const ajaxhookScript = document.createElement('script');
+      ajaxhookScript.src = chrome.runtime.getURL('lib/ajaxhook.min.js');
+      ajaxhookScript.type = 'text/javascript';
       
-      const script = document.createElement('script');
-      script.src = scriptUrl;
-      script.type = 'text/javascript';
-      
-      script.onload = () => {
-        console.log('[Google Ads Modifier] 拦截脚本注入成功');
-        this.isInjected = true;
+      ajaxhookScript.onload = () => {
+        console.log('[Google Ads Modifier] ajaxhook 库注入成功');
         
-        // 注入成功后，发送配置
-        this.updateInterceptorConfig();
+        // 第二步:注入拦截脚本
+        const interceptorScript = document.createElement('script');
+        interceptorScript.src = chrome.runtime.getURL('js/inject-script.js');
+        interceptorScript.type = 'text/javascript';
+        
+        interceptorScript.onload = () => {
+          console.log('[Google Ads Modifier] 拦截脚本注入成功');
+          this.isInjected = true;
+          
+          // 注入成功后,发送配置
+          setTimeout(() => {
+            this.updateInterceptorConfig();
+          }, 100);
+        };
+        
+        interceptorScript.onerror = (error) => {
+          console.error('[Google Ads Modifier] 拦截脚本注入失败:', error);
+        };
+        
+        (document.head || document.documentElement).appendChild(interceptorScript);
       };
       
-      script.onerror = (error) => {
-        console.error('[Google Ads Modifier] 拦截脚本注入失败:', error);
+      ajaxhookScript.onerror = (error) => {
+        console.error('[Google Ads Modifier] ajaxhook 库注入失败:', error);
       };
       
-      (document.head || document.documentElement).appendChild(script);
+      (document.head || document.documentElement).appendChild(ajaxhookScript);
       
     } catch (error) {
       console.error('[Google Ads Modifier] 注入脚本时出错:', error);
@@ -228,13 +235,13 @@ class GoogleAdsNetworkInterceptor {
     console.log('[Google Ads Modifier] 激活网络拦截...');
     
     if (!this.isInjected) {
-      this.injectInterceptorScript();
+      this.injectScripts();
     } else {
       // 重新发送配置以确保最新
       this.updateInterceptorConfig();
     }
     
-    // 刷新页面以应用拦截（可选）
+    // 刷新页面以应用拦截(可选)
     if (this.config.settings.autoUpdate) {
       console.log('[Google Ads Modifier] 建议刷新页面以完全应用拦截');
     }
@@ -309,5 +316,5 @@ class GoogleAdsNetworkInterceptor {
 // 初始化
 const interceptor = new GoogleAdsNetworkInterceptor();
 
-// 暴露到全局，方便调试
+// 暴露到全局,方便调试
 window.googleAdsInterceptor = interceptor;
