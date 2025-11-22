@@ -1,30 +1,40 @@
-// 专门针对 Google Ads OverviewService 的拦截器
+// 通用 Google Ads RPC 拦截器 - 拦截所有请求并显示详细信息
 (function() {
   'use strict';
 
-  console.log('%c[OverviewService Interceptor] 🎯 拦截器已加载', 'color: #00ff00; font-weight: bold; font-size: 14px;');
+  console.log('%c[Google Ads Interceptor] 🔍 通用拦截器已加载', 'color: #00ff00; font-weight: bold; font-size: 14px;');
 
-  if (window.__overviewServiceInterceptorInstalled) {
-    console.log('[OverviewService Interceptor] 已安装，跳过');
+  if (window.__googleAdsInterceptorInstalled) {
+    console.log('[Google Ads Interceptor] 已安装，跳过');
     return;
   }
-  window.__overviewServiceInterceptorInstalled = true;
+  window.__googleAdsInterceptorInstalled = true;
 
   // 统计
   const stats = {
     total: 0,
     intercepted: 0,
     modified: 0,
-    urls: []
+    allUrls: [],
+    interceptedUrls: []
   };
 
   // 配置
   let config = {
     adGroups: [],
-    globalData: {},
+    globalData: {
+      impressions: '50000',
+      clicks: '3000',
+      conversions: '60',
+      cost: '840.00',
+      ctr: '6.00%',
+      cpc: '0.28',
+      conversionRate: '2.00%',
+      cpa: '14.00'
+    },
     settings: {
       verbose: true,
-      enableGlobalData: true  // 默认启用全局数据以便快速测试
+      enableGlobalData: true
     }
   };
 
@@ -34,7 +44,7 @@
     
     if (event.data.type === 'UPDATE_INTERCEPTOR_CONFIG') {
       config = event.data.config;
-      console.log('%c[OverviewService Interceptor] ✅ 配置已更新', 'color: #00bfff; font-weight: bold;', config);
+      console.log('%c[Google Ads Interceptor] ✅ 配置已更新', 'color: #00bfff; font-weight: bold;', config);
     }
   });
 
@@ -46,24 +56,36 @@
     const url = typeof resource === 'string' ? resource : resource.url;
     
     stats.total++;
+    
+    // 记录所有请求
+    if (url && !url.includes('google-analytics') && !url.includes('gstatic')) {
+      stats.allUrls.push(url);
+      
+      // 每个请求都打印出来
+      console.log(`%c[Fetch #${stats.total}] ${url.substring(0, 100)}...`, 'color: #999; font-size: 11px;');
+    }
 
-    // 检查是否是目标请求
-    const isTargetRequest = url && (
+    // 非常宽松的拦截条件 - 拦截所有 Google Ads 相关请求
+    const shouldIntercept = url && (
+      url.includes('ads.google.com') ||
+      url.includes('/aw/') ||
+      url.includes('/_/') ||
+      url.includes('/rpc/') ||
       url.includes('OverviewService') ||
-      url.includes('/_/rpc/') ||
-      url.includes('/aw_essentials/') ||
-      url.includes('ads.google.com/aw')
+      url.includes('AdGroupService') ||
+      url.includes('CampaignService')
     );
 
-    if (!isTargetRequest) {
+    if (!shouldIntercept) {
       return originalFetch.apply(this, args);
     }
 
     stats.intercepted++;
-    stats.urls.push(url);
+    stats.interceptedUrls.push(url);
     
-    console.log('%c[OverviewService Interceptor] 🎯 拦截到目标请求！', 'color: #ff9800; font-weight: bold;');
+    console.log('%c[Google Ads Interceptor] 🎯 拦截到请求！', 'color: #ff9800; font-weight: bold; font-size: 13px;');
     console.log('  URL:', url);
+    console.log('  Method:', options?.method || 'GET');
 
     try {
       // 调用原始请求
@@ -73,13 +95,13 @@
       // 读取响应
       const text = await clonedResponse.text();
       
-      if (config.settings.verbose) {
-        console.log('%c[OverviewService Interceptor] 📥 原始响应:', 'color: #2196f3;');
-        console.log('  长度:', text.length, 'bytes');
-        console.log('  前300字符:', text.substring(0, 300));
-      }
+      console.log('%c[Google Ads Interceptor] 📥 响应信息:', 'color: #2196f3; font-weight: bold;');
+      console.log('  状态:', response.status);
+      console.log('  Content-Type:', response.headers.get('content-type'));
+      console.log('  长度:', text.length, 'bytes');
+      console.log('  前500字符:', text.substring(0, 500));
 
-      // 修改数据
+      // 尝试修改
       let modifiedText = text;
       
       try {
@@ -87,13 +109,18 @@
         
         if (modifiedText !== text) {
           stats.modified++;
-          console.log('%c[OverviewService Interceptor] ✨ 数据已修改！', 'color: #4caf50; font-weight: bold;');
+          console.log('%c[Google Ads Interceptor] ✨ 数据已修改！', 'color: #4caf50; font-weight: bold; font-size: 13px;');
+          console.log('  修改后的前500字符:', modifiedText.substring(0, 500));
+        } else {
+          console.log('%c[Google Ads Interceptor] ℹ️ 数据未修改（未找到可修改的字段）', 'color: #ff9800;');
         }
       } catch (error) {
-        console.error('[OverviewService Interceptor] 修改数据时出错:', error);
+        console.error('[Google Ads Interceptor] ❌ 修改数据时出错:', error);
       }
 
-      // 创建新的响应
+      console.log('---');
+
+      // 创建新响应
       const modifiedResponse = new Response(modifiedText, {
         status: response.status,
         statusText: response.statusText,
@@ -102,100 +129,92 @@
 
       Object.defineProperty(modifiedResponse, 'url', { value: response.url });
 
-      // 定期打印统计
-      if (stats.intercepted % 3 === 0) {
-        printStats();
-      }
-
       return modifiedResponse;
 
     } catch (error) {
-      console.error('[OverviewService Interceptor] 处理请求时出错:', error);
+      console.error('[Google Ads Interceptor] ❌ 处理请求时出错:', error);
       return originalFetch.apply(this, args);
     }
   };
 
-  console.log('%c[OverviewService Interceptor] ✅ Fetch 拦截器已安装', 'color: #00ff00; font-weight: bold;');
+  console.log('%c[Google Ads Interceptor] ✅ Fetch 拦截器已安装', 'color: #00ff00; font-weight: bold;');
 
   // ==================== 数据修改逻辑 ====================
 
   function modifyResponse(text, url) {
-    // Google RPC 响应通常以 )]}'\n 开头
+    console.log('[Google Ads Interceptor] 🔄 开始分析响应数据...');
+
+    // 处理 Google RPC 格式
     let jsonText = text;
     let hasPrefix = false;
     
     if (text.startsWith(")]}'\n")) {
       jsonText = text.substring(5);
       hasPrefix = true;
+      console.log('  检测到 Google RPC 安全前缀');
     }
 
+    // 尝试 JSON 解析
     try {
-      // 尝试解析 JSON
       const data = JSON.parse(jsonText);
+      console.log('  ✓ JSON 解析成功');
+      console.log('  数据类型:', typeof data);
+      console.log('  是否为数组:', Array.isArray(data));
       
-      if (config.settings.verbose) {
-        console.log('[OverviewService Interceptor] 📊 解析的数据类型:', typeof data);
-        console.log('[OverviewService Interceptor] 📊 是否为数组:', Array.isArray(data));
-        if (Array.isArray(data)) {
-          console.log('[OverviewService Interceptor] 📊 数组长度:', data.length);
-        }
+      if (Array.isArray(data)) {
+        console.log('  数组长度:', data.length);
+        console.log('  数组内容:', data);
+      } else {
+        console.log('  对象键:', Object.keys(data));
       }
 
-      // 修改数据
+      // 深度修改
       const modifiedData = deepModify(data);
 
-      // 序列化回 JSON
       let result = JSON.stringify(modifiedData);
-      
-      // 加回前缀
       if (hasPrefix) {
         result = ")]}'\n" + result;
-      }
-
-      if (config.settings.verbose) {
-        console.log('[OverviewService Interceptor] ✅ 数据已成功修改并序列化');
       }
 
       return result;
 
     } catch (error) {
-      console.error('[OverviewService Interceptor] JSON 解析失败:', error);
-      console.log('[OverviewService Interceptor] 尝试正则替换...');
-      
-      // 使用正则替换作为备用方案
+      console.log('  ✗ JSON 解析失败，尝试正则替换');
       return regexModify(text);
     }
   }
 
-  function deepModify(data) {
+  function deepModify(data, path = '') {
     if (data === null || data === undefined) {
       return data;
     }
 
-    // 如果是数组
+    // 数组
     if (Array.isArray(data)) {
-      return data.map(item => deepModify(item));
+      return data.map((item, index) => deepModify(item, `${path}[${index}]`));
     }
 
-    // 如果是对象
+    // 对象
     if (typeof data === 'object') {
       const modified = {};
+      let hasModification = false;
       
       for (const key in data) {
         const value = data[key];
-        
-        // 检查键名是否包含指标关键词
+        const currentPath = path ? `${path}.${key}` : key;
         const keyLower = String(key).toLowerCase();
         
-        // 尝试修改指标
-        if (shouldModifyField(keyLower, value)) {
-          modified[key] = getModifiedValue(keyLower, value);
+        // 检查是否应该修改这个字段
+        if (isMetricField(keyLower, value)) {
+          const newValue = getModifiedValue(keyLower, value);
+          modified[key] = newValue;
           
-          if (config.settings.verbose && modified[key] !== value) {
-            console.log(`  修改字段: ${key} = ${value} → ${modified[key]}`);
+          if (newValue !== value) {
+            hasModification = true;
+            console.log(`  🔧 修改: ${currentPath} = ${value} → ${newValue}`);
           }
         } else {
-          modified[key] = deepModify(value);
+          modified[key] = deepModify(value, currentPath);
         }
       }
       
@@ -205,54 +224,57 @@
     return data;
   }
 
-  function shouldModifyField(key, value) {
-    // 只修改数字或数字字符串
+  function isMetricField(key, value) {
+    // 必须是数字类型
     if (typeof value !== 'number' && typeof value !== 'string') {
       return false;
     }
 
-    // 检查是否是数字值
-    if (typeof value === 'string' && !/^\d+(\.\d+)?$/.test(value)) {
-      return false;
+    // 字符串必须是纯数字
+    if (typeof value === 'string') {
+      if (!/^\d+(\.\d+)?$/.test(value.trim())) {
+        return false;
+      }
     }
 
+    // 指标关键词
     const keywords = [
-      'impression', 'impr',
-      'click', 
+      'impression', 'impr', 'imp',
+      'click',
       'conversion', 'conv',
-      'cost', 'spend',
-      'ctr', 'click_rate',
-      'cpc', 'avg_cpc',
-      'cpa', 'cost_per',
-      'rate', 'ratio'
+      'cost', 'spend', 'amount',
+      'ctr', 'clickrate',
+      'cpc', 'avgcpc',
+      'cpa', 'costper',
+      'rate', 'ratio', 'percent'
     ];
 
     return keywords.some(keyword => key.includes(keyword));
   }
 
   function getModifiedValue(key, originalValue) {
-    const globalData = config.globalData;
+    const g = config.globalData;
 
     // 展示次数
-    if (key.includes('impression') || key.includes('impr')) {
-      return parseNumber(globalData.impressions || '50000');
+    if (key.includes('impr') || key.includes('impression')) {
+      return parseNumber(g.impressions);
     }
     
     // 点击次数
     if (key.includes('click') && !key.includes('rate') && !key.includes('cpc')) {
-      return parseNumber(globalData.clicks || '3000');
+      return parseNumber(g.clicks);
     }
     
     // 转化次数
-    if (key.includes('conversion') || key.includes('conv')) {
-      return parseNumber(globalData.conversions || '60');
+    if (key.includes('conv')) {
+      return parseNumber(g.conversions);
     }
     
     // 费用
-    if (key.includes('cost') || key.includes('spend')) {
-      const cost = parseFloat((globalData.cost || '840.00').replace(/[^0-9.]/g, ''));
+    if (key.includes('cost') || key.includes('spend') || key.includes('amount')) {
+      const cost = parseFloat(g.cost.replace(/[^0-9.]/g, ''));
       
-      // 如果原值很大，可能是微单位
+      // 如果原值超过10万，可能是微单位（micros）
       if (typeof originalValue === 'number' && originalValue > 100000) {
         return Math.round(cost * 1000000);
       }
@@ -260,53 +282,56 @@
     }
     
     // 点击率
-    if (key.includes('ctr') || key === 'click_rate') {
-      return parsePercent(globalData.ctr || '6.00%');
+    if (key.includes('ctr') || key.includes('clickrate')) {
+      return parsePercent(g.ctr);
     }
     
-    // 每次点击费用
-    if (key.includes('cpc') || key.includes('avg_cpc')) {
-      return parseFloat((globalData.cpc || '0.28').replace(/[^0-9.]/g, ''));
+    // CPC
+    if (key.includes('cpc') || key.includes('avgcpc')) {
+      return parseFloat(g.cpc.replace(/[^0-9.]/g, ''));
     }
     
     // 转化率
-    if (key.includes('conv_rate') || key.includes('conversion_rate')) {
-      return parsePercent(globalData.conversionRate || '2.00%');
+    if (key.includes('convrate') || key.includes('conversionrate')) {
+      return parsePercent(g.conversionRate);
     }
     
-    // 每次转化费用
-    if (key.includes('cpa') || key.includes('cost_per_conversion')) {
-      return parseFloat((globalData.cpa || '14.00').replace(/[^0-9.]/g, ''));
+    // CPA
+    if (key.includes('cpa') || key.includes('costper')) {
+      return parseFloat(g.cpa.replace(/[^0-9.]/g, ''));
     }
 
     return originalValue;
   }
 
   function regexModify(text) {
+    console.log('  使用正则表达式进行替换...');
     let modified = text;
-    const globalData = config.globalData;
+    let changeCount = 0;
+    const g = config.globalData;
 
-    try {
-      // 替换各种可能的数字格式
-      const replacements = [
-        { pattern: /"impressions?"\s*:\s*(\d+)/gi, value: parseNumber(globalData.impressions || '50000') },
-        { pattern: /"clicks?"\s*:\s*(\d+)/gi, value: parseNumber(globalData.clicks || '3000') },
-        { pattern: /"conversions?"\s*:\s*(\d+)/gi, value: parseNumber(globalData.conversions || '60') },
-        { pattern: /"cost"\s*:\s*(\d+\.?\d*)/gi, value: parseFloat((globalData.cost || '840.00').replace(/[^0-9.]/g, '')) }
-      ];
+    const patterns = [
+      { name: 'impressions', regex: /"impressions?"\s*:\s*"?(\d+)"?/gi, value: parseNumber(g.impressions) },
+      { name: 'clicks', regex: /"clicks?"\s*:\s*"?(\d+)"?/gi, value: parseNumber(g.clicks) },
+      { name: 'conversions', regex: /"conversions?"\s*:\s*"?(\d+)"?/gi, value: parseNumber(g.conversions) },
+      { name: 'cost', regex: /"cost"\s*:\s*"?(\d+\.?\d*)"?/gi, value: parseFloat(g.cost.replace(/[^0-9.]/g, '')) }
+    ];
 
-      replacements.forEach(({ pattern, value }) => {
-        const matches = modified.match(pattern);
-        if (matches) {
-          console.log(`  正则匹配到: ${matches[0]}`);
-          modified = modified.replace(pattern, (match, num) => {
-            return match.replace(num, value);
-          });
-        }
-      });
+    patterns.forEach(({ name, regex, value }) => {
+      const matches = text.match(regex);
+      if (matches && matches.length > 0) {
+        console.log(`  找到 ${matches.length} 个 ${name} 字段`);
+        modified = modified.replace(regex, (match) => {
+          changeCount++;
+          return match.replace(/\d+\.?\d*/, value);
+        });
+      }
+    });
 
-    } catch (error) {
-      console.error('[OverviewService Interceptor] 正则替换失败:', error);
+    if (changeCount > 0) {
+      console.log(`  ✓ 通过正则替换修改了 ${changeCount} 个字段`);
+    } else {
+      console.log(`  ✗ 未找到可替换的字段`);
     }
 
     return modified;
@@ -324,25 +349,58 @@
   }
 
   function printStats() {
-    console.log('%c[OverviewService Interceptor] 📊 统计', 'color: #9c27b0; font-weight: bold;');
-    console.log(`  总请求: ${stats.total}`);
-    console.log(`  拦截: ${stats.intercepted}`);
-    console.log(`  修改: ${stats.modified}`);
-    console.log(`  拦截的URL:`, stats.urls);
+    console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #9c27b0;');
+    console.log('%c📊 拦截器统计信息', 'color: #9c27b0; font-weight: bold; font-size: 14px;');
+    console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #9c27b0;');
+    console.log(`总请求数: ${stats.total}`);
+    console.log(`拦截数: ${stats.intercepted}`);
+    console.log(`修改数: ${stats.modified}`);
+    console.log(`拦截率: ${((stats.intercepted / stats.total) * 100).toFixed(2)}%`);
+    console.log(`修改率: ${((stats.modified / stats.total) * 100).toFixed(2)}%`);
+    console.log('\n最近10个请求:');
+    stats.allUrls.slice(-10).forEach((url, i) => {
+      console.log(`  ${i + 1}. ${url.substring(0, 80)}...`);
+    });
+    console.log('\n拦截的请求:');
+    if (stats.interceptedUrls.length === 0) {
+      console.log('  (暂无)');
+    } else {
+      stats.interceptedUrls.forEach((url, i) => {
+        console.log(`  ${i + 1}. ${url}`);
+      });
+    }
+    console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #9c27b0;');
   }
 
-  // 全局调试接口
-  window.__overviewInterceptor = {
+  // 全局接口
+  window.__googleAdsInterceptor = {
     getStats: () => stats,
     getConfig: () => config,
     printStats: printStats,
-    setVerbose: (verbose) => {
-      config.settings.verbose = verbose;
-      console.log(`详细日志已${verbose ? '启用' : '禁用'}`);
+    setVerbose: (v) => {
+      config.settings.verbose = v;
+      console.log(`详细日志已${v ? '启用' : '禁用'}`);
+    },
+    updateData: (newData) => {
+      config.globalData = { ...config.globalData, ...newData };
+      console.log('✅ 数据已更新:', config.globalData);
+      console.log('💡 请刷新页面或触发新的请求以查看效果');
     }
   };
 
-  console.log('%c[OverviewService Interceptor] 🎉 初始化完成！', 'color: #00ff00; font-weight: bold; font-size: 16px;');
-  console.log('%c  现在会拦截所有 OverviewService 和 RPC 请求', 'color: #999;');
-  console.log('%c  使用 window.__overviewInterceptor.printStats() 查看统计', 'color: #999;');
+  // 定期打印统计
+  setInterval(() => {
+    if (stats.total > 0) {
+      console.log(`%c[拦截器活跃] 总请求:${stats.total} | 拦截:${stats.intercepted} | 修改:${stats.modified}`, 'color: #666; font-size: 11px;');
+    }
+  }, 10000);
+
+  console.log('%c[Google Ads Interceptor] 🎉 初始化完成！', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+  console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00ff00;');
+  console.log('%c💡 使用方法:', 'color: #00bfff; font-weight: bold;');
+  console.log('  window.__googleAdsInterceptor.printStats()  - 查看统计');
+  console.log('  window.__googleAdsInterceptor.getConfig()   - 查看配置');
+  console.log('  window.__googleAdsInterceptor.updateData({ impressions: "999999" })  - 更新数据');
+  console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00ff00;');
+  console.log('%c现在会详细记录每个请求，请刷新页面或进行操作', 'color: #ff9800;');
 })();
