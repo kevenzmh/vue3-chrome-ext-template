@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Google Ads Request Interceptor - Headless",
+  "version": "3.0.0",
+  "description": "无界面的 Google Ads 请求拦截器 - 纯后台运行",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.google.com/*",
+    "http://*.google.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.google.com/*",
+        "http://*.google.com/*"
+      ],
+      "js": [
+        "lib/ajaxhook.min.js",
+        "src/pages/content/request-interceptor.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/*.js",
+        "src/pages/content/*.js",
+        "public/data/*.json"
+      ],
+      "matches": [
+        "https://*.google.com/*",
+        "http://*.google.com/*"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "src/assets/icon-16.png",
+    "32": "src/assets/icon-32.png",
+    "48": "src/assets/icon-48.png",
+    "128": "src/assets/icon-128.png"
+  }
+}
