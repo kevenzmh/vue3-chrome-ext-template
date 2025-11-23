@@ -1,24 +1,13 @@
 {
-  "name": "vue3-chrome-ext-template",
-  "version": "0.2.0",
+  "name": "google-ads-data-replacer",
+  "version": "2.0.0",
   "private": true,
+  "description": "Google Ads 数据替换工具 - 纯后台运行版本",
   "scripts": {
-    "dev": "vue-cli-service build --watch",
-    "build": "vue-cli-service build",
-    "lint": "eslint ."
+    "build": "node build.js",
+    "dev": "node build.js"
   },
   "dependencies": {
-    "vue": "^3.2.47"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.21.3",
-    "@babel/eslint-parser": "^7.21.3",
-    "@vue/cli-plugin-babel": "~5.0.8",
-    "@vue/cli-service": "~5.0.8",
-    "@vue/compiler-sfc": "^3.2.47",
-    "@vue/eslint-config-standard": "^8.0.1",
-    "copy-webpack-plugin": "^11.0.0",
-    "eslint": "^8.36.0",
-    "eslint-plugin-vue": "^9.9.0"
+    "fs-extra": "^11.1.0"
   }
 }
